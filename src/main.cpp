@@ -8,6 +8,9 @@
 
 #define productUID "com.usefulsensors.pete:person_sensor"
 
+#define TRANSMIT_DELAY_MS (15 * 1000)
+#define SAMPLE_DELAY_MS (500)
+
 Notecard notecard;
 
 // the setup function runs once when you press reset or power the board
@@ -32,52 +35,52 @@ void setup()
 // the loop function runs over and over again forever
 void loop()
 {
+  // Sample twice a second, but only transmit the averaged results
+  // every 15 seconds.
+  static int faces_total = 0;
+  static int facing_faces_total = 0;
+  static int sensor_samples_total = 0;
+  static int32_t time_since_transmit = 0;
+
   person_sensor_results_t results = {};
-  // Perform a read action on the I2C address of the sensor to get the
-  // current face information detected.
   if (!person_sensor_read(&results)) {
     Serial.println("No person sensor results found on the i2c bus");
-    delay(15000);
+    delay(SAMPLE_DELAY_MS);
     return;
   }
 
-  Serial.println("********");
-  Serial.print(results.num_faces);
-  Serial.println(" faces found");
+  faces_total += results.num_faces;
   for (int i = 0; i < results.num_faces; ++i) {
     const person_sensor_face_t* face = &results.faces[i];
-    Serial.print("Face #");
-    Serial.print(i);
-    Serial.print(": ");
-    Serial.print(face->box_confidence);
-    Serial.print(" confidence, (");
-    Serial.print(face->box_left);
-    Serial.print(", ");
-    Serial.print(face->box_top);
-    Serial.print("), (");
-    Serial.print(face->box_right);
-    Serial.print(", ");
-    Serial.print(face->box_bottom);
-    Serial.print("), ");
     if (face->is_facing) {
-      Serial.println("facing");
-    } else {
-      Serial.println("not facing");
+      facing_faces_total += 1;
     }
   }
+  sensor_samples_total += 1;
 
-  J *req = notecard.newRequest("note.add");
-  if (req != NULL)
-  {
-    JAddStringToObject(req, "file", "sensors.qo");
-    JAddBoolToObject(req, "sync", true);
-    J *body = JAddObjectToObject(req, "body");
-    if (body)
+  time_since_transmit += SAMPLE_DELAY_MS;
+  if (time_since_transmit >= TRANSMIT_DELAY_MS) {
+    J *req = notecard.newRequest("note.add");
+    if (req != NULL)
     {
-      JAddNumberToObject(body, "num_faces", results.num_faces);
+      JAddStringToObject(req, "file", "sensors.qo");
+      JAddBoolToObject(req, "sync", true);
+      J *body = JAddObjectToObject(req, "body");
+      if (body)
+      {
+        const float num_faces = (float)(faces_total) / sensor_samples_total;
+        const float num_facing_faces = (float)(facing_faces_total) / sensor_samples_total;
+        JAddNumberToObject(body, "num_faces", num_faces);
+        JAddNumberToObject(body, "num_facing_faces", num_facing_faces);
+      }
+      notecard.sendRequest(req);
+      Serial.println("d"); 
     }
-    notecard.sendRequest(req);
-  }
+    faces_total = 0;
+    facing_faces_total = 0;
+    sensor_samples_total = 0;
+    time_since_transmit = 0;
+ }
 
-  delay(15000);
+  delay(SAMPLE_DELAY_MS);
 }
