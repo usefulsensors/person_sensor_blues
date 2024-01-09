@@ -74,7 +74,6 @@ void loop()
         JAddNumberToObject(body, "num_facing_faces", num_facing_faces);
       }
       notecard.sendRequest(req);
-      Serial.println("d"); 
     }
     faces_total = 0;
     facing_faces_total = 0;
